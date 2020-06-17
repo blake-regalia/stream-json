@@ -2,6 +2,8 @@
 
 const unit = require('heya-unit');
 
+const {Readable} = require('stream');
+
 const Verifier = require('../utils/Verifier');
 
 const ReadString = require('./ReadString');
@@ -122,13 +124,35 @@ unit.add(module, [
       verifier = new Verifier({jsonStreaming: true}),
       pipeline = ReadString.make(input).pipe(verifier);
 
+    let gotError = false;
     pipeline.on('error', function(error) {
+      gotError = true;
       eval(t.TEST('error.line === 1 && error.pos === 3 && error.offset === 2'));
       async.done();
     });
     pipeline.on('finish', function() {
-      t.test(!"We shouldn't be here!");
+      if (!gotError) {
+        t.test(!"We shouldn't be here!");
+        async.done();
+      }
+    });
+  },
+  function test_verifier_infinite_fail(t) {
+    const async = t.startAsync('test_verifier_infinite_fail');
+    if (!Readable.from) {
+      async.done();
+      return;
+    }
+    const sample = '{"key1":1}garbage{"key3":2}',
+      verifier = new Verifier({jsonStreaming: true});
+    verifier.on('error', err => {
+      eval(t.TEST('err'));
       async.done();
     });
+    Readable.from(
+      (function*() {
+        while(true) yield sample;
+      })()
+    ).pipe(verifier);
   }
 ]);
